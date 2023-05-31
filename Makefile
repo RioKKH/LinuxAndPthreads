@@ -1,6 +1,7 @@
 TARGET := firstThread firstThread_mainShorter firstThread2 firstThread2_exitProcess\
 					firstThread3 firstThread3_join firstThread3_join_better\
-					firstThread4 firstThread_equal firstThread_self threadAttr threadCancel
+					firstThread4 firstThread_equal firstThread_self threadAttr threadCancel\
+					threadTimer
 
 CFLAGS := $(CFLAGS) -pthread
 LDFLAGS := $(LDFLAGS) -pthread
@@ -41,6 +42,9 @@ threadAttr: threadAttr.c
 	$(CC) $(LDFLAGS) $^ -o $@
 
 threadCancel: threadCancel.c
+	$(CC) $(LDFLAGS) $^ -o $@
+
+threadTimer: threadTimer.c
 	$(CC) $(LDFLAGS) $^ -o $@
 
 clean:
