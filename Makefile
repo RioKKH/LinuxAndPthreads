@@ -1,7 +1,8 @@
 TARGET := firstThread firstThread_mainShorter firstThread2 firstThread2_exitProcess\
 					firstThread3 firstThread3_join firstThread3_join_better\
 					firstThread4 firstThread_equal firstThread_self threadAttr threadCancel\
-					threadTimer fastPrimeNumber_NG fastPrimeNumber_OK
+					threadTimer fastPrimeNumber_NG fastPrimeNumber_OK fly2 fly3_deadlock\
+					fly3_nodeadlock fly2rwlock soloFly soloFly2 condTimedWait
 
 CFLAGS := $(CFLAGS) -pthread
 LDFLAGS := $(LDFLAGS) -pthread
@@ -53,6 +54,26 @@ fastPrimeNumber_NG: fastPrimeNumber_NG.c
 fastPrimeNumber_OK: fastPrimeNumber_OK.c
 	$(CC) $(LDFLAGS) $^ -o $@ -g
 
+fly2: fly2.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
+
+fly3_deadlock: fly3_deadlock.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
+
+fly3_nodeadlock: fly3_nodeadlock.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
+
+fly2rwlock: fly2rwlock.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
+
+soloFly: soloFly.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
+
+soloFly2: soloFly2.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
+
+condTimedWait: condTimedWait.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
 
 clean:
 	rm -f $(TARGET) *.o

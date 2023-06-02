@@ -1,0 +1,348 @@
+/**
+ * 実行を同期したいケース
+ * 以下の3スレッド構成で実装する
+ * 1. ハエ移動処理スレッド
+ * 2. 画面描画スレッド
+ * 3. ユーザーの座標入力を受け付けるスレッド
+ */
+
+#include <pthread.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+
+#define WIDTH 78 /*スクリーン幅*/
+#define HEIGHT 23 // スクリーン高さ
+#define MAX_FLY 1 // 描画するハエの数
+// const char *flyMarkList = "o@*+.#"; // ハエの描画文字一覧
+#define DRAW_CYCLE 50 // 描画周期 ミリ秒
+// #define MIN_SPEED 1.0 // ハエの最低移動速度
+// #define MAX_SPEED 20.0 // ハエの最大移動速度
+
+int stopRequest; // スレッド終了フラグ
+
+/**
+ * ミリ秒単位でスリープする
+ */
+void mSleep(int msec)
+{
+	struct timespec ts;
+	ts.tv_sec = msec/1000;
+	ts.tv_nsec = (msec%1000)*1000000;
+	nanosleep(&ts, NULL);
+}
+
+/**
+ * 画面クリア
+ */
+void clearScreen()
+{
+	//- 以下のエスケープコードをターミナルに送ると画面がクリアされる
+	fputs("\033[2J\033[1;1H", stdout);
+}
+
+/**
+ * カーソル移動
+ */
+void moveCursor(int x, int y)
+{
+	//- このエスケープコードをターミナルに送ると、カーソル位置がx, yになる
+	printf("\033[%d,%dH", y, x);
+}
+
+/**
+ * カーソル位置保存
+ */
+void saveCursor()
+{
+	printf("\0337"); // このエスケープコードをターミナルに送るとカーソル位置を記録する
+}
+
+/**
+ * カーソル位置復帰
+ */
+void restoreCursor()
+{
+	printf("\0338"); // このエスケープコードをターミナルに送ると記録したカーソル位置に戻る
+}
+
+/**
+ * ハエ構造体
+ */
+typedef struct {
+	char mark; // 表示キャラクタ
+	double x, y; // 座標
+	double angle; // 移動方向(角度)
+	double speed; // 移動速度(ピクセル/秒)
+	double destX, destY; // 目標地点
+	int busy; // 移動中フラグ
+	pthread_mutex_t mutex;
+	pthread_cond_t cond; // <-------- Declare condition variable.
+} Fly;
+
+
+Fly flyList[MAX_FLY];
+
+/**
+ * ハエの状態を初期化
+ */
+void FlyInitRandom(Fly *fly, char mark_)
+{
+	fly->mark = mark_;
+	pthread_mutex_init(&fly->mutex, NULL);
+	pthread_cond_init(&fly->cond, NULL); // <------- Initialize condition.
+	fly->x = (double)WIDTH/2.0;
+	fly->y = (double)HEIGHT/2.0;
+	fly->angle = 0;
+	fly->speed = 2;
+	fly->destX = fly->x;
+	fly->destY = fly->y;
+	fly->busy = 0;
+	// fly->x = randDouble(0, (double)(WIDTH-1));
+	// fly->y = randDouble(0, (double)(HEIGHT-1));
+	// fly->angle = randDouble(0, M_2_PI);
+	// fly->speed = randDouble(MIN_SPEED, MAX_SPEED);
+}
+
+
+/**
+ * ハエ構造体の利用終了
+ */
+void FlyDestroy(Fly *fly)
+{
+	pthread_mutex_destroy(&fly->mutex);
+	pthread_cond_destroy(&fly->cond); // <------ Destroy condition variable.
+}
+
+/**
+ * ハエを移動する
+ */
+void FlyMove(Fly *fly)
+{
+	int i;
+	pthread_mutex_lock(&fly->mutex);
+	fly->x += cos(fly->angle);
+	fly->y += sin(fly->angle);
+	pthread_mutex_unlock(&fly->mutex);
+}
+
+/**
+ * ハエが指定座標にあるかどうか
+ */
+int FlyIsAt(Fly *fly, int x, int y)
+{
+	int res;
+	pthread_mutex_lock(&fly->mutex);
+	res = ((int)(fly->x) == x) && ((int)(fly->y) == y);
+	pthread_mutex_unlock(&fly->mutex);
+	return res;
+}
+
+
+/**
+ * 目標地点に合わせて移動方向と速度を調整する
+ */
+void FlySetDirection(Fly *fly)
+{
+	pthread_mutex_lock(&fly->mutex);
+	double dx = fly->destX - fly->x;
+	double dy = fly->destY - fly->y;
+	fly->angle = atan2(dy, dx);
+	fly->speed = sqrt(dx*dx + dy*dy)/5.0;
+	if (fly->speed < 2) // あまりおそすぎると分かりづらいので
+	{
+		fly->speed = 2;
+	}
+	pthread_mutex_unlock(&fly->mutex);
+}
+
+/**
+ * 目標地点までの距離を得る
+ */
+double FlyDistanceToDestination(Fly *fly)
+{
+	double dx, dy, res;
+	pthread_mutex_lock(&fly->mutex);
+	dx = fly->destX - fly->x;
+	dy = fly->destY - fly->y;
+	res = sqrt(dx*dx + dy*dy);
+	pthread_mutex_unlock(&fly->mutex);
+	return res;
+}
+
+/**
+ * ハエの目標地点をセットする
+ */
+int FlySetDestination(Fly *fly, double x, double y)
+{
+	// 移動中はセット禁止
+	if (fly->busy)
+	{
+		return 0;
+	}
+	pthread_mutex_lock(&fly->mutex);
+	fly->destX = x;
+	fly->destY = y;
+	pthread_cond_signal(&fly->cond);
+	pthread_mutex_unlock(&fly->mutex);
+	return 1;
+}
+
+/**
+ * 目標地点がセットされるまで待つ
+ */
+void FlyWaitForSetDestination(Fly *fly)
+{
+	pthread_mutex_lock(&fly->mutex);
+	if (pthread_cond_wait(&fly->cond, &fly->mutex) != 0)
+	{
+		printf("Fatal error on pthread_cond_wait.\n");
+		exit(1);
+	}
+	pthread_mutex_unlock(&fly->mutex);
+}
+
+/**
+ * ハエを動かすスレッド
+ */
+void *doMove(void *arg)
+{
+	Fly *fly = (Fly *)arg;
+	while(!stopRequest)
+	{
+		// 行き先がセットされるのを待つ
+		fly->busy = 0;
+		FlyWaitForSetDestination(fly);
+		if (FlyDistanceToDestination(fly) < 1)
+		{
+			continue;
+		}
+		fly->busy = 1;
+		// 目標地点の方向をセット
+		FlySetDirection(fly);
+		// 行き先に到着するまで移動する
+		while ((FlyDistanceToDestination(fly) >= 1) && !stopRequest)
+		{
+			FlyMove(fly);
+			mSleep((int)(1000.0 / fly->speed));
+		}
+	}
+	return NULL;
+}
+
+/**
+ * スクリーンを描画する
+ */
+void drawScreen()
+{
+	int x, y;
+	char ch;
+	int i;
+
+	saveCursor();
+	moveCursor(0, 0);
+	for (y = 0; y < HEIGHT; y++)
+	{
+		for (x = 0; x < WIDTH; x++)
+		{
+			ch = 0;
+			//- x, yの位置にあるハエがあればそのmarkを表示する
+			for (i = 0; i < MAX_FLY; i++)
+			{
+				if (FlyIsAt(&flyList[i], x, y))
+				{
+					ch = flyList[i].mark;
+					break;
+				}
+			}
+			if (ch != 0)
+			{
+				putchar(ch);
+			}
+			else if ((y == 0) || (y == HEIGHT - 1))
+			{
+				//- 上下の枠線を表示する
+				putchar('-');
+			}
+			else if ((x == 0) || (x == WIDTH - 1))
+			{
+				//- 左右の枠線を表示する
+				putchar('|');
+			}
+			else
+			{
+				//- 枠線でもハエでもない
+                putchar(' ');
+			}
+		}
+		putchar('\n');
+	}
+	restoreCursor();
+	fflush(stdout);
+}
+
+
+/**
+ * スクリーンを描画し続けるスレッド
+ */
+void *doDraw(void *arg)
+{
+	while (!stopRequest)
+	{
+		// clearScreen();
+		drawScreen();
+		mSleep(DRAW_CYCLE);
+	}
+	return NULL;
+}
+
+
+int main()
+{
+	pthread_t drawThread;
+	pthread_t moveThread;
+	int i;
+	char buf[40], *cp;
+	double destX, destY;
+
+	//- 初期化
+	// srand((unsigned int)time(NULL));
+	clearScreen();
+	FlyInitRandom(&flyList[0] , '@');
+
+	//- ハエの動作処理
+	pthread_create(&moveThread, NULL, doMove, (void *)&flyList[0]);
+
+	//- 描画処理
+	pthread_create(&drawThread, NULL, doDraw, NULL);
+
+	//- メインスレッドは何か入力されるのをまち、ハエの目標地点をセットする
+	while(1)
+	{
+		printf("Destination? ");
+		fflush(stdout);
+		fgets(buf, sizeof(buf), stdin);
+		if (strncmp(buf, "stop", 4) == 0)
+		{
+			break;
+		}
+		//- 座標を読み取ってセットする
+		destX = strtod(buf, &cp);
+		destY = strtod(cp, &cp);
+		if (!FlySetDestination(&flyList[0], destX, destY))
+		{
+			printf("The fly is busy now. Try later\n");
+		}
+	}
+	stopRequest = 1;
+
+	//- スレッド撤収
+	pthread_join(drawThread, NULL);
+	pthread_join(moveThread, NULL);
+	FlyDestroy(&flyList[0]);
+
+	return 0;
+}
