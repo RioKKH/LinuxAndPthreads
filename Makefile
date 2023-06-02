@@ -1,7 +1,7 @@
 TARGET := firstThread firstThread_mainShorter firstThread2 firstThread2_exitProcess\
 					firstThread3 firstThread3_join firstThread3_join_better\
 					firstThread4 firstThread_equal firstThread_self threadAttr threadCancel\
-					threadTimer
+					threadTimer fastPrimeNumber_NG fastPrimeNumber_OK
 
 CFLAGS := $(CFLAGS) -pthread
 LDFLAGS := $(LDFLAGS) -pthread
@@ -46,6 +46,13 @@ threadCancel: threadCancel.c
 
 threadTimer: threadTimer.c
 	$(CC) $(LDFLAGS) $^ -o $@
+
+fastPrimeNumber_NG: fastPrimeNumber_NG.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g
+
+fastPrimeNumber_OK: fastPrimeNumber_OK.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g
+
 
 clean:
 	rm -f $(TARGET) *.o
