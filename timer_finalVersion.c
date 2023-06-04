@@ -16,21 +16,27 @@ typedef struct {
 void *functionA_wrapper(void *arg)
 {
 	MyArgs *args = (MyArgs *)arg;
+	int *result_ptr = (int *)malloc(sizeof(int));
 
 	// 本番のコードではここに関数Aの処理が入る
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; i < 1; i++)
 	{
 		printf("Function A is running... %d\n", i);
 		printf("Arg1: %d, Arg2: %f\n", args->arg1, args->arg2);
 		sleep(1);
 	}
+	// スレッドの中で値を修正
+	args->arg1 = 10;
 
 	// 関数Aが終了したので、共有状態を更新する
 	pthread_mutex_lock(&lock);
 	pthread_cond_signal(&cv);
 	pthread_mutex_unlock(&lock);
 
-	return NULL;
+	*result_ptr = args->arg1;
+	return (void *)result_ptr;
+	// return (void *)(long)args->arg1;
+	// return NULL;
 }
 
 void *timerThread(void *arg)
@@ -83,6 +89,7 @@ int main()
 {
 	pthread_t tidA, tidTimer;
 	MyArgs args = {123, 456.789};
+	void *ret;
 
 	pthread_mutex_init(&lock, NULL);
 	pthread_cond_init(&cv, NULL);
@@ -101,12 +108,17 @@ int main()
 		exit(1);
 	}
 
-	pthread_join(tidA, NULL);
+	pthread_join(tidA, &ret);
+	// pthread_join(tidA, NULL);
 	pthread_join(tidTimer, NULL);
 
 	pthread_mutex_destroy(&lock);
 	pthread_cond_destroy(&cv);
 
+	printf("args->arg1: %d\n", args.arg1);
+    printf("functionA_wrapper returned: %d\n", *(int*)ret);
 	printf("Exiting the program.\n");
+	free(ret);
+
 	return  0;
 }
