@@ -13,11 +13,18 @@ pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 int isFunctionACompleted = 0;
 
+// メモリクリンナップハンドラの定義
+void cleanup(void *arg)
+{
+	free(arg);
+	printf("Cleanup hander was called. Memory was freed.\n");
+}
+
 // 関数Aの定義
 int functionA(int val1, int val2)
-{
-	// 関数Aの処理 (仮にここではval1とval2を足し合わせる処理とする)
+{ // 関数Aの処理 (仮にここではval1とval2を足し合わせる処理とする)
 	int result = val1 + val2;
+	// for (int i = 0; i < 1; i++)
 	for (int i = 0; i < 10; i++)
 	{
 		printf("Function A is running... %d\n", i);
@@ -31,11 +38,6 @@ void* functionA_wrapper(void* args)
 {
 	FunctionA_Args* func_args = (FunctionA_Args*)args;
 	int result = functionA(func_args->val1, func_args->val2);
-
-	pthread_mutex_lock(&mutex);
-	isFunctionACompleted = 1;
-	pthread_cond_signal(&cond);
-	pthread_mutex_unlock(&mutex);
 
 	// 動的にメモリをかくほして結果を返す
 	// ptread_createの第3引数でしていするスレッド関数のプロトタイプはvoid *(*)(void *)
@@ -53,7 +55,23 @@ void* functionA_wrapper(void* args)
 	// 戻り値をfreeする必要がある。このプログラムではmain関数内のpthread_join後で
 	// それを行っている。
 	int* res_ptr = (int*)malloc(sizeof(int));
+	if (res_ptr == NULL)
+	{
+		perror("Failed to create thread for function A");
+		printf("At %s:%d\n", __FILE__, __LINE__);
+		return NULL;
+	}
+
+	pthread_cleanup_push(cleanup, res_ptr);
+
 	*res_ptr = result;
+
+	pthread_mutex_lock(&mutex);
+	isFunctionACompleted = 1;
+	pthread_cond_signal(&cond);
+	pthread_mutex_unlock(&mutex);
+
+	pthread_cleanup_pop(0);
 
 	return (void *)res_ptr;
 }
@@ -102,9 +120,13 @@ int main()
 	}
 
 	pthread_join(tidA, &retval);
-	printf("Function A returned: %d\n", *(int *)retval);
+	if (retval != NULL)
+	{
+		printf("DEBUG: Function A returned: %d\n", *(int *)retval);
+		free(retval);
+	}
 	// functionA_wrapper関数で動的に確保しためもりを、main関数で開放している。
-	free(retval); // 確保したメモリを開放
+	// free(retval); // 確保したメモリを開放
 
 	pthread_join(tidTimer, NULL);
 
