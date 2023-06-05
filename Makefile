@@ -3,7 +3,7 @@ TARGET := firstThread firstThread_mainShorter firstThread2 firstThread2_exitProc
 					firstThread4 firstThread_equal firstThread_self threadAttr threadCancel\
 					threadTimer fastPrimeNumber_NG fastPrimeNumber_OK fly2 fly3_deadlock\
 					fly3_nodeadlock fly2rwlock soloFly soloFly2 condTimedWait soloFly3 fly5 fly6\
-					timer_finalVersion timer_finalVersion2 timer_finalVersion3
+					timer_finalVersion timer_finalVersion2 timer_finalVersion3 timer
 
 
 CFLAGS := $(CFLAGS) -pthread
@@ -94,6 +94,10 @@ timer_finalVersion2: timer_finalVersion2.c
 
 timer_finalVersion3: timer_finalVersion3.c
 	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
+
+timer: timer.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
+
 
 clean:
 	rm -f $(TARGET) *.o

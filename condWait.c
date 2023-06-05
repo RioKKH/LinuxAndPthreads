@@ -52,8 +52,10 @@ int main()
 	pthread_create(&thread, NULL, threadFunc, NULL);
 	sleep(3);
 	printf("main: Signal\n");
+	printf("Before\n");
 	pthread_cond_signal(&cond);
 	pthread_join(thread, NULL);
+	printf("After\n");
 
 	pthread_mutex_destroy(&mutex);
 	pthread_cond_destroy(&cond);

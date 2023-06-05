@@ -1,3 +1,4 @@
+#include <asm-generic/errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -7,6 +8,7 @@
 typedef struct {
 	int val1;
 	int val2;
+	int ret;
 } FunctionA_Args;
 
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
@@ -16,8 +18,10 @@ int isFunctionACompleted = 0;
 // メモリクリンナップハンドラの定義
 void cleanup(void *arg)
 {
-	free(arg);
 	printf("Cleanup hander was called. Memory was freed.\n");
+	FunctionA_Args *func_args = (FunctionA_Args *)arg;
+	func_args->ret = 777;
+	printf("cleanup: %d\n", func_args->ret);
 }
 
 // 関数Aの定義
@@ -37,43 +41,30 @@ int functionA(int val1, int val2)
 void* functionA_wrapper(void* args)
 {
 	FunctionA_Args* func_args = (FunctionA_Args*)args;
-	int result = functionA(func_args->val1, func_args->val2);
 
-	// 動的にメモリをかくほして結果を返す
-	// ptread_createの第3引数でしていするスレッド関数のプロトタイプはvoid *(*)(void *)
-	// でなければならないという制約がある。つまり戻り値としてvoidのポインタを返すことが
-	// 求められている。
-	// 関数Aがvoid*以外の型を返す場合、スレッドからその戻り値を適切に取得するためには、
-	// それをヒープ領域 (mallocなどで確保した領域)に保存し、そのアドレスを返すことで
-	// 実現する。なぜならば、ヒープ領域は関数のスコープを超えても生存期間が続くから。
-	// もしスタック領域(ローカル変数が確保される領域)に保存しようとすると、関数が終了
-	// した時点でそのメモリが開放されてしまい、無効なポインタを返すことになってしまう。
-	// したがって、ここではfunctionAの結果をmallocでヒープ領域に確保したメモリに格納
-	// している。このような処理は、スレッドの戻り値を主スレッド側で取得するために必要
-	// な手段となる。
-	// ただし、このような方法を撮った場合、メモリリークを防ぐために、必ずスレッドの
-	// 戻り値をfreeする必要がある。このプログラムではmain関数内のpthread_join後で
-	// それを行っている。
-	int* res_ptr = (int*)malloc(sizeof(int));
-	if (res_ptr == NULL)
-	{
-		perror("Failed to create thread for function A");
-		printf("At %s:%d\n", __FILE__, __LINE__);
-		return NULL;
-	}
+	// int* res_ptr = (int*)malloc(sizeof(int));
+	// if (res_ptr == NULL)
+	// {
+	// 	perror("Failed to create thread for function A");
+	// 	printf("At %s:%d\n", __FILE__, __LINE__);
+	// 	return NULL;
+	// }
+	// int result;
+	pthread_cleanup_push(cleanup, func_args);
 
-	pthread_cleanup_push(cleanup, res_ptr);
-
-	*res_ptr = result;
+	func_args->ret = functionA(func_args->val1, func_args->val2);
+	// *res_ptr = result;
+	printf("result: %d\n", func_args->ret);
 
 	pthread_mutex_lock(&mutex);
-	isFunctionACompleted = 1;
 	pthread_cond_signal(&cond);
 	pthread_mutex_unlock(&mutex);
 
+	printf("Reached at the end of functionA_wrapper\n");
 	pthread_cleanup_pop(0);
 
-	return (void *)res_ptr;
+	// return (void *)res_ptr;
+	return NULL;
 }
 
 void* timerThread(void * arg)
@@ -81,18 +72,26 @@ void* timerThread(void * arg)
 	pthread_t tidA = *(pthread_t *)arg;
 	struct timespec ts;
 	clock_gettime(CLOCK_REALTIME, &ts);
-	ts.tv_sec += 5;
+	ts.tv_sec += 3;
 
 	pthread_mutex_lock(&mutex);
-	while (!isFunctionACompleted)
+
+	switch (pthread_cond_timedwait(&cond, &mutex, &ts))
 	{
-		if (pthread_cond_timedwait(&cond, &mutex, &ts) == ETIMEDOUT)
-		{
+		case 0:
+			printf("timerThread: Got signal\n");
+			break;
+
+		case ETIMEDOUT:
 			pthread_cancel(tidA);
-				printf("Function A was cancelled due to timeout.\n");
-				break;
-		}
+			printf("timerThread was cancelled due to timeout.\n");
+			break;
+
+		default:
+			printf("timerThread: Error on pthread_cond_timedwait ");
+			exit(1);
 	}
+
 	pthread_mutex_unlock(&mutex);
 
 	return NULL;
@@ -101,8 +100,9 @@ void* timerThread(void * arg)
 
 int main()
 {
-	pthread_t tidA, tidTimer;
-	FunctionA_Args args = {3, 7}; // 関数Aに渡す引数
+	pthread_t tidA;
+	pthread_t tidTimer;
+	FunctionA_Args args = {3, 7, 0}; // 関数Aに渡す引数
 	void *retval;
 
 	if (pthread_create(&tidA, NULL, functionA_wrapper, &args) != 0)
@@ -119,16 +119,29 @@ int main()
 		exit(1);
 	}
 
-	pthread_join(tidA, &retval);
-	if (retval != NULL)
+	pthread_join(tidA, NULL);
+	printf("%d\n", args.ret);
+	// pthread_join(tidA, &retval);
+	/*
+	if (retval == NULL)
 	{
-		printf("DEBUG: Function A returned: %d\n", *(int *)retval);
-		free(retval);
+		printf("retval is NULL\n");
 	}
-	// functionA_wrapper関数で動的に確保しためもりを、main関数で開放している。
-	// free(retval); // 確保したメモリを開放
+	else
+	{
+		printf("retval is not NULL\n");
+		// printf("DEBUG: Function A returned: %d\n", *(int *)retval);
+		// int r = *((int *)retval);
+		// printf("pthread_join: %d\n", r);
+		// free(retval);
+	}
+    free(retval); // 確保したメモリを開放
+	*/
 
 	pthread_join(tidTimer, NULL);
+
+	pthread_mutex_destroy(&mutex);
+	pthread_cond_destroy(&cond);
 
 	printf("Exiting the program.\n");
 	return 0;
