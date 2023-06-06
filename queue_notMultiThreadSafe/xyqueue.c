@@ -4,25 +4,26 @@
 #include <time.h>
 
 /**
- * キューの要素型
+ * @brief キューの要素型
  */
 typedef struct {
-    double x;
-    double y;
+    double x; /**< X座標値 */
+    double y; /**< Y座標値 */
 } XYQueueItem;
 
 /**
- * キュー管理構造体
+ * @brief キュー管理構造体
  */
 struct XYQueue_ {
-    XYQueueItem *data; /* データ配列 */
-    size_t size;       /* データ配列サイズ(最大要素数 +1) */
-    size_t wp;         /* 追加位置 */
-    size_t rp;         /* 読出位置 */
+    XYQueueItem *data; /**< データ配列 */
+    size_t size;       /**< データ配列サイズ(最大要素数 +1) */
+    size_t wp;         /**< 追加位置 */
+    size_t rp;         /**< 読出位置 */
 };
 
 /**
- * ミリ秒単位でスリープする
+ * @file xyqueue.c
+ * @brief ミリ秒単位でスリープする
  */
 static void mSleep(int msec)
 {
