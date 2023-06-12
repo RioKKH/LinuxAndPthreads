@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <signal.h>
+#include <errno.h>
 
 int main(void)
 {

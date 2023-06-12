@@ -12,15 +12,20 @@ pthread_cond_t cond;
 
 void *threadFunc(void *arg)
 {
+	int i;
 	struct timespec ts;
 
 	printf("threadFunc: Start\n");
-	sleep(2);
 	pthread_mutex_lock(&mutex);
 	printf("threadFunc: WAit for signal\n");
 	// 現在時刻の2秒後まで成立条件を待つ
 	clock_gettime(CLOCK_REALTIME, &ts);
-	ts.tv_sec += 2;
+	ts.tv_sec += 5;
+	for (i = 0; i < 10; i++)
+	{
+		printf("%d\n", i);
+		sleep(1);
+	}
 
 	// pthread_cond_timedwait()は、
 	// 1. 指定時刻に達する前に条件変数がONになれば0を、
@@ -41,6 +46,7 @@ void *threadFunc(void *arg)
 	}
 	// pthread_cond_timedwait関数はpthread_cond_wait関数と同様に
 	// 帰ってくる直前でミューテックスをロックする 
+	printf("DEBUG: unlock in threadFunc()\n");
 	pthread_mutex_unlock(&mutex);
 	return NULL;
 }
