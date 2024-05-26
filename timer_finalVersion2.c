@@ -1,4 +1,3 @@
-#include <asm-generic/errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
@@ -28,8 +27,8 @@ void cleanup(void *arg)
 int functionA(int val1, int val2)
 { // 関数Aの処理 (仮にここではval1とval2を足し合わせる処理とする)
 	int result = val1 + val2;
-	// for (int i = 0; i < 1; i++)
-	for (int i = 0; i < 10; i++)
+	for (int i = 0; i < 1; i++)
+	// for (int i = 0; i < 10; i++)
 	{
 		printf("Function A is running... %d\n", i);
 		sleep(1);
@@ -40,23 +39,32 @@ int functionA(int val1, int val2)
 // 関数Aのラッパー関数
 void* functionA_wrapper(void* args)
 {
+	int ret;
 	FunctionA_Args* func_args = (FunctionA_Args*)args;
 
-	// int* res_ptr = (int*)malloc(sizeof(int));
-	// if (res_ptr == NULL)
-	// {
-	// 	perror("Failed to create thread for function A");
-	// 	printf("At %s:%d\n", __FILE__, __LINE__);
-	// 	return NULL;
-	// }
-	// int result;
 	pthread_cleanup_push(cleanup, func_args);
 
+	printf("functionA: before functionA\n");
 	func_args->ret = functionA(func_args->val1, func_args->val2);
+	printf("functionA: after functionA\n");
 	// *res_ptr = result;
 	printf("result: %d\n", func_args->ret);
 
-	pthread_mutex_lock(&mutex);
+	printf("functionA: before lock mutex\n");
+	ret = pthread_mutex_lock(&mutex);
+	printf("functionA: ret is %d\n", ret);
+	if (ret == 0)
+	{
+		printf("functionA: lock mutex\n");
+	}
+	else if (ret == EBUSY)
+	{
+		printf("functionA: lock is busy\n");
+	}
+	else
+	{
+		printf("functionA: Cannot get lock\n");
+	}
 	pthread_cond_signal(&cond);
 	pthread_mutex_unlock(&mutex);
 
@@ -69,12 +77,25 @@ void* functionA_wrapper(void* args)
 
 void* timerThread(void * arg)
 {
+	int ret;
 	pthread_t tidA = *(pthread_t *)arg;
 	struct timespec ts;
 	clock_gettime(CLOCK_REALTIME, &ts);
 	ts.tv_sec += 3;
 
 	pthread_mutex_lock(&mutex);
+	if (ret == 0)
+	{
+		printf("timerThread: lock mutex\n");
+	}
+	else if (ret == EBUSY)
+	{
+		printf("timerThread: lock is busy\n");
+	}
+	else
+	{
+		printf("timerThread: Cannot get lock\n");
+	}
 
 	switch (pthread_cond_timedwait(&cond, &mutex, &ts))
 	{
@@ -92,7 +113,20 @@ void* timerThread(void * arg)
 			exit(1);
 	}
 
-	pthread_mutex_unlock(&mutex);
+	ret = pthread_mutex_unlock(&mutex);
+	if (ret == 0)
+	{
+		printf("timerThread: unlock mutex\n");
+	}
+	else if (ret == EBUSY)
+	{
+		printf("timerThread: unlock is impossible\n");
+	}
+	else
+	{
+		printf("timerThread: Cannot get unlocked\n");
+	}
+	printf("timerThread: unlock mutex\n");
 
 	return NULL;
 }
@@ -104,6 +138,9 @@ int main()
 	pthread_t tidTimer;
 	FunctionA_Args args = {3, 7, 0}; // 関数Aに渡す引数
 	void *retval;
+
+	pthread_mutex_init(&mutex, NULL);
+	pthread_cond_init(&cond, NULL);
 
 	if (pthread_create(&tidA, NULL, functionA_wrapper, &args) != 0)
 	{
@@ -120,29 +157,12 @@ int main()
 	}
 
 	pthread_join(tidA, NULL);
-	printf("%d\n", args.ret);
-	// pthread_join(tidA, &retval);
-	/*
-	if (retval == NULL)
-	{
-		printf("retval is NULL\n");
-	}
-	else
-	{
-		printf("retval is not NULL\n");
-		// printf("DEBUG: Function A returned: %d\n", *(int *)retval);
-		// int r = *((int *)retval);
-		// printf("pthread_join: %d\n", r);
-		// free(retval);
-	}
-    free(retval); // 確保したメモリを開放
-	*/
-
 	pthread_join(tidTimer, NULL);
 
 	pthread_mutex_destroy(&mutex);
 	pthread_cond_destroy(&cond);
 
+	printf("%d\n", args.ret);
 	printf("Exiting the program.\n");
 	return 0;
 }
