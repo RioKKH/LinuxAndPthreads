@@ -7,6 +7,11 @@
 
 /**
  * 実行を同期したいケース
+ * このプログラムの場合、スリープを使ってメインスレッドで値が入力されるのを
+ * 待っているので、入力が完了してからハエが移動を開始するまでに最大で100msの
+ * 遅延が発生する可能性がある。
+ * かといって、スリープの時間を短くするとCPUの負荷が高くなるので、それはそれで
+ * 問題になる。
  */
 
 #define WIDTH 78  /* スクリーンの幅 */
@@ -165,5 +170,111 @@ void *doMove(void *arg) {
     while (!stopRequest) {
         /* 行先がセットされるのを待つ */
         fly->busy = 0;
+        while ((FlyDistanceToDestination(fly) < 1) && !stopRequest) {
+            mSleep(100);
+        }
+        fly->busy = 1;
+        /* 目標地点の方向をセット */
+        FlySetDirection(fly);
+        /* 行き先に到着するまで移動する */
+        while ((FlyDistanceToDestination(fly) >= 1) && !stopRequest) {
+            FlyMove(fly);
+            mSleep((int)(1000.0/fly->speed));
+        }
+    }
+    return NULL;
+}
+
+/*
+ * スクリーンを描画する
+ */
+void drawScreen() {
+    int x, y;
+    char ch;
+    int i;
+
+    saveCursor();
+    moveCursor(0, 0);
+    for (y = 0; y < HEIGHT; y++) {
+        for (x = 0; x < WIDTH; x++) {
+            ch = 0;
+            /* x, yの位置にあるハエがあればそのmarkを表示する */
+            for (i = 0; i < MAX_FLY; i++) {
+                if (FlyIsAt(&flyList[i], x, y)) {
+                    ch = flyList[i].mark;
+                    break;
+                }
+            }
+            if (ch != 0) {
+                putchar(ch);
+            } else if ((y == 0) || (y == HEIGHT - 1)) {
+                /* 上下の枠線を表示する */
+                putchar('-');
+            } else if ((x == 0) || (x == WIDTH - 1)) {
+                /* 左右の枠線を表示する */
+                putchar('|');
+            } else {
+                /* 枠線でもハエでもない */
+                putchar(' ');
+            }
+        }
+        putchar('\n');
+    }
+    restoreCursor();
+    fflush(stdout);
+}
+
+/*
+ * スクリーンを描画し続けるスレッド
+ */
+void *doDraw(void *arg) {
+    while (!stopRequest) {
+        drawScreen();
+        mSleep(DRAW_CYCLE);
+    }
+    return NULL;
+}
+
+int main() {
+    pthread_t drawThread;
+    pthread_t moveThread;
+    int i;
+    char buf[40], *cp;
+    double destX, destY;
+
+    /* 初期化 */
+    clearScreen();
+    FlyInitCenter(&flyList[0], '@');
+
+    /* ハエの動作処理 */
+    pthread_create(&moveThread, NULL, doMove, (void *)&flyList[0]);
+
+    /* 描画処理 */
+    pthread_create(&drawThread, NULL, doDraw, NULL);
+
+    /* メインスレッドは何か入力されるのを待ち、ハエの目標点をセットする */
+    while(1) {
+        printf("Destination? ");
+        fflush(stdout);
+        fgets(buf, sizeof(buf), stdin);
+        if (strncmp(buf, "stop", 4) == 0) /* "stop"と入力するとプログラム終了 */
+            break;
+        /* 座標を読み取ってセットする */
+        destX = strtod(buf, &cp);
+        destY = strtod(cp, &cp);
+        if (!FlySetDestination(&flyList[0], destX, destY)) {
+            printf("The fly is busy now. Try later.\n");
+        }
+    }
+    stopRequest = 1;
+
+    /* スレッド撤収 */
+    pthread_join(drawThread, NULL);
+    pthread_join(moveThread, NULL);
+    FlyDestroy(&flyList[0]);
+
+    return 0;
+}
+
 
 
