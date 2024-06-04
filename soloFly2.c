@@ -171,10 +171,18 @@ int FlySetDestination(Fly *fly, double x, double y) {
  */
 void FlyWaitForSetDestination(Fly *fly) {
     pthread_mutex_lock(&fly->mutex);
+    /*
+     * pthread_cond_wait()を呼び出すと以下のような処理が行われる
+     * 1. 条件変数をOFFにする
+     * 2. ミューテックスをアンロックする
+     * 3. 条件変数がONになるのを待ち続ける
+     * 4. (条件変数がONになったら)ミューテックスをロックする
+     */
     if (pthread_cond_wait(&fly->cond, &fly->mutex) != 0) {
         printf("Fatal error on pthread_cond_wait.\n");
         exit(1);
     }
+    /* 条件変数がONになったら、ミューテックスがロックされている */
     pthread_mutex_unlock(&fly->mutex);
 }
 
