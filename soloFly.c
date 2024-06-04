@@ -1,9 +1,9 @@
 #include <pthread.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
+#include <unistd.h> // nanosleep
+#include <stdio.h>  // printf
+#include <stdlib.h> // strtod
+#include <string.h> // strncmp
+#include <math.h>   // atan2, cos, sin, sqrt
 
 /**
  * 実行を同期したいケース
