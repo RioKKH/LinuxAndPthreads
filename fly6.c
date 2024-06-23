@@ -69,7 +69,7 @@ double randDouble(double minValue, double maxValue)
 void clearScreen()
 {
 	//- 以下のエスケープコードをターミナルに送ると画面がクリアされる
-	fputs("\033[2J", stdout);
+	fputs("\033[2J\033[1;1H", stdout);
 	// fputs("\033[2J\033[1;1H", stdout);
 }
 
@@ -168,7 +168,19 @@ void FlyMove(Fly *fly)
 	}
 
 	pthread_mutex_unlock(&fly->mutex);
-	// 描画要請
+    /*
+     * # ブロックされないハエの移動
+     * ハエが移動するたびにrequestDraw()関数を呼び出して描画要請を出す
+     * ハエが移動する際に、描画中であっても移動処理がブロックされない。
+     * requestDrawはミューテックスを短時間だけブロックする為、他のハエの
+     * 移動もスムーズに行える。
+     *
+     * # 複数の描画要求に対する1回の描画
+     * 複数のハエが同時にrequestDraw()を呼び出しても、描画要求フラグは
+     * 1回だけ立てられる。その後、描画スレッドが描画を行うまで他の描画要求は
+     * 無視される。これにより、複数の描画要求に対して1度の描画で済み、無駄な
+     * 再描画を避けることができる。
+    */
 	requestDraw();
 	// pthread_mutex_lock(&drawMutex);
 	// pthread_cond_signal(&drawCond);
@@ -204,11 +216,15 @@ void *doMove(void *arg)
 
 /**
  * スクリーンの描画を要請する
+ * 描画要請フラグを立てて、描画スレッドに通知する
+ * ミューテックスと条件変数はこのフラグの変更を同期するために使う
  */
 void requestDraw()
 {
 	pthread_mutex_lock(&drawMutex);
 	drawRequest = 1;
+    // drawRequstフラグを1に設定し、条件変数にシグナルを送る。
+    // これにより描画スレッドに描画要求を通知する。
 	pthread_cond_signal(&drawCond);
 	pthread_mutex_unlock(&drawMutex);
 }
@@ -279,8 +295,11 @@ void *doDraw(void *arg)
 		}
 		while (drawRequest && !stopRequest)
 		{
+            // 描画要請フラグをクリア
+            // この間は他のスレッドから描画要請が来ても無視する
 			drawRequest = 0;
 			pthread_mutex_unlock(&drawMutex);
+            clearScreen();
 			drawScreen();
 			pthread_mutex_lock(&drawMutex);
 		}
@@ -309,13 +328,13 @@ int main()
 		FlyInitRandom(&flyList[i], flyMarkList[i]);
 	}
 
-	//- ハエの動作処理
+	//- ハエの動作処理を行うスレッドを生成
 	for (i = 0; i < MAX_FLY; i++)
 	{
 		pthread_create(&moveThread[i], NULL, doMove, (void *)&flyList[i]);
 	}
 
-	//- 描画処理
+	//- 描画処理を行うスレッドを生成
 	pthread_create(&drawThread, NULL, doDraw, NULL);
 
 	//- メインスレッドは何か入力されるのを待つだけ
