@@ -66,7 +66,7 @@ double randDouble(double minValue, double maxValue)
 void clearScreen()
 {
 	//- 以下のエスケープコードをターミナルに送ると画面がクリアされる
-	fputs("\033[2J", stdout);
+	fputs("\033[2J\033[1;1H", stdout);
 	// fputs("\033[2J\033[1;1H", stdout);
 }
 
@@ -87,7 +87,7 @@ typedef struct {
 	double x, y; // 座標
 	double angle; // 移動方向(角度)
 	double speed; // 移動速度(ピクセル/秒)
-	pthread_mutex_t mutex;
+	pthread_mutex_t mutex; // ハエ毎にロックするためのミューテックス
 } Fly;
 
 
@@ -258,8 +258,8 @@ void *doDraw(void *arg)
 		switch(pthread_cond_timedwait_msec(&drawCond, &drawMutex, 1000))
 		{
 			case 0: // got signal
+				clearScreen();
 				drawScreen();  // <------ 描画中はずっとdrawMutexをロックしている
-				// clearScreen();
 				break;
 			case ETIMEDOUT: // timeout
 				// nothing to do
