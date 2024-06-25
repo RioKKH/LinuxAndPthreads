@@ -6,7 +6,7 @@ TARGET := firstThread firstThread_mainShorter firstThread2 firstThread2_exitProc
 					fly3_nodeadlock fly2rwlock soloFly soloFly2\
 					condWait condTimedWait soloFly3 fly5 fly6\
 					timer_finalVersion timer_finalVersion2 timer_finalVersion3 timer\
-					multiCondWait multiCondWaitBroadcast
+					multiCondWait multiCondWaitBroadcast starvation
 
 
 
@@ -121,6 +121,9 @@ multiCondWait: multiCondWait.c
 	$(CC) $(LDFLAGS) $^ -o $@
 
 multiCondWaitBroadcast: multiCondWaitBroadcast.c
+	$(CC) $(LDFLAGS) $^ -o $@
+
+starvation: starvation.c
 	$(CC) $(LDFLAGS) $^ -o $@
 
 
