@@ -1,35 +1,29 @@
-#include <pthread.h> /* pthread_* */
-#include <unistd.h>  /* sleep */
-#include <stdio.h>   /* printf */
-#include <stdlib.h>  /* exit */
-#include <time.h>    /* clock_gettime */
-#include <errno.h>   /* ETIMEDOUT */
-
+#include <pthread.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 pthread_mutex_t mutex;
 pthread_cond_t cond;
 
 void *threadFunc(void *arg) {
-    struct timespec ts;
-
     printf("threadFunc: Start\n");
-    sleep(1);
+    sleep(2);
+    // pthread_cond_wait()関数を呼び出す前にcondと対になるmutexをロックしておく
     pthread_mutex_lock(&mutex);
     printf("threadFunc: Wait for signal\n");
-    /* 現在時刻の2秒後まで条件成立を待つ */
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ts.tv_sec += 2;
-    switch(pthread_cond_timedwait(&cond, &mutex, &ts)) {
-        case 0:
-            printf("threadFunc: Got signal\n");
-            break;
-        case ETIMEDOUT:
-            printf("threadFunc: Timeout\n");
-            break;
-        default:
-            printf("threadFunc: Error on pthread_cond_wait\n");
-            exit(1);
+    // pthread_cond_wait()関数を呼び出すと、
+    // 1. 条件変数をOFFにして、
+    // 2. mutexをアンロックしてから待機する
+    // 3. 条件変数がONになるのを待ち続ける
+    // 4. 条件変数がONになったら、mutexをロックしてから待機を終了する
+    // 1 ~ 3の処理はatomicに行われる
+    // pthread_cond_wait()関数から帰ってきた時点でmutexはロックされている点も重要
+    if (pthread_cond_wait(&cond, &mutex) != 0) {
+        printf("threadFunc: Error on pthread_cond_wait\n");
+        exit(1);
     }
+    printf("threadFunc: Got signal\n");
     pthread_mutex_unlock(&mutex);
     return NULL;
 }
@@ -37,14 +31,14 @@ void *threadFunc(void *arg) {
 int main() {
     pthread_t thread;
 
+    /* 条件変数を使う時には、原則としてそれと対になるミューテックスを用意する */
     pthread_mutex_init(&mutex, NULL);
     pthread_cond_init(&cond, NULL);
 
     pthread_create(&thread, NULL, threadFunc, NULL);
-    /* 2秒でタイムアウトするようにしているのだから、5秒待てばタイムアウトする */
-    sleep(5);
+    sleep(3);
     printf("main: Signal\n");
-    pthread_cond_signal(&cond);
+    pthread_cond_signal(&cond); // ここで待っているスレッドにシグナルを送る
     pthread_join(thread, NULL);
 
     pthread_mutex_destroy(&mutex);
