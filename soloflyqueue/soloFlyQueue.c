@@ -47,3 +47,29 @@ int pthread_cond_timedwait_msec(pthread_cond_t *cond, pthread_mutex_t *mutex, lo
     return pthread_cond_timedwait(cond, mutex, &ts);
 }
 
+/*
+ * 画面クリア
+ */
+void clearScreen() {
+    fputs("\033[2J", stdout); /* このエスケープコードをターミナルに送ると画面がクリアされる */
+}
+
+/*
+ * カーソル移動
+ */
+void moveCursor(int x, int y) {
+    /* このエスケープコードをターミナルに送るとカーソル位置がx, yになる */
+    printf("\033[%d;%dH", y, x);
+}
+
+/*
+ * カーソル位置保存
+ */
+void saveCursor() {
+    printf("\0337"); /* このエスケープコードをターミナルに送るとカーソル位置を記憶する */
+}
+
+/*
+ * カーソル位置復帰
+ */
+
