@@ -278,3 +278,7 @@ void *doDraw(void *arg) {
             drawScreen();
             pthread_mutex_lock(&drawMutex);
         }
+    }
+    pthread_mutex_unlock(&drawMutex);
+    return NULL;
+}
