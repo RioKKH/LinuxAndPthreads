@@ -282,3 +282,50 @@ void *doDraw(void *arg) {
     pthread_mutex_unlock(&drawMutex);
     return NULL;
 }
+
+int main() {
+    pthread_t drawThread;
+    pthread_t moveThread;
+    int i;
+    char buf[40], *cp;
+    double destX, destY;
+
+    /* 初期化 */
+    pthread_mutex_init(&drawMutex, NULL);
+    pthread_cond_init(&drawCond, NULL);
+    clearScreen();
+    FlyInitCenter(&flyList[0], '@');
+
+    /* ハエの動作処理 */
+    pthread_create(&moveThread, NULL, doMove, (void *)&flyList[0]);
+
+    /* 描画処理 */
+    pthread_create(&drawThread, NULL, doDraw, NULL);
+    requestDraw();
+
+    /* メインスレッドはなにか入力されるのを待ち、ハエの目標点をセットする */
+    while(1) {
+        printf("Destination? ");
+        fflush(stdout);
+        fgets(buf, sizeof(buf), stdin);
+        if (strncmp(buf, "stop", 4) == 0) /* stopと入力するとプログラム終了 */
+            break;
+        /* 座標を読み取ってセットする */
+        destX = strtod(buf, &cp);
+        destY = strtod(cp, &cp);
+        if (!FlySetDestination(&flyList[0], destX, destY)) {
+            printf("The fly is busy now. Try later.\n");
+        }
+    }
+    stopRequest = 1;
+
+    /* スレッド撤収 */
+    pthread_join(drawThread, NULL);
+    pthread_join(moveThread, NULL);
+    FlyDestroy(&flyList[0]);
+    pthread_mutex_destroy(&drawMutex);
+    pthread_cond_destroy(&drawCond);
+
+    return 0;
+}
+
