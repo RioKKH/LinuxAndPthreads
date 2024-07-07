@@ -4,7 +4,8 @@ TARGET := firstThread firstThread_mainShorter firstThread2 firstThread2_exitProc
 					threadTimer fastPrimeNumber_NG fastPrimeNumber_OK\
 					fly fly2 fly2_2 fly3_2 fly3_3 fly3_deadlock\
 					fly3_nodeadlock fly2rwlock soloFly soloFly2\
-					condWait condTimedWait soloFly3 fly5 fly6\
+					condWait condWaitKeyboardInput condWaitKeyboardInputTimedout condTimedWait\
+					soloFly3 fly5 fly6\
 					timer_finalVersion timer_finalVersion2 timer_finalVersion3 timer\
 					multiCondWait multiCondWaitBroadcast starvation
 
@@ -91,6 +92,12 @@ soloFly2: soloFly2.c
 	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
 
 condWait: condWait.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
+
+condWaitKeyboardInput: condWaitKeyboardInput.c
+	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
+
+condWaitKeyboardInputTimedout: condWaitKeyboardInputTimedout.c
 	$(CC) $(LDFLAGS) $^ -o $@ -g -lm
 
 condTimedWait: condTimedWait.c
